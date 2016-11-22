@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<label for="BarCode"> Bar Code </label><br><br>
+<input type="text" class="register-control" id="BarCode" name="BarCode" placeholder="Enter BarCode"></input> <br><br>
+<button onclick="validateForm()">Submit</button>
+
+<p id="demo"></p>
+
+<script>
+function validateForm(){
+var productInfo = [
+{product:"Cereal",
+productCode:"A12T-4GH7Y-QPL9-3N4MA",
+price:3.46},
+{product:"Chicken",
+productCode:"E5T6-9UI3-TH15-QR88",
+price:8.18},
+{product:"Pop",
+productCode:"YRT6-72AS-K736-L4AR",
+price:1.63},
+{product:"Pizza",
+productCode:"TQ4C-VV6T-75ZX-1RMR",
+price:6.78},
+{product:"Tuna",
+productCode:"65P1-UDGM-XH2M-LQW2",
+price:5.89}]
+var barCode = document.getElementById("BarCode").value;
+alert(barCode);
+var productSplit = barCode.split(";");
+var total = 0;
+var tax = 0;
+var errorMsg;
+for(var i=0; i<productInfo.length;i++)
+{
+    for(var j=0; j<productSplit.length;j++)
+     {
+        if(productInfo[i].productCode == productSplit[j])
+        {
+              total = total +       productInfo[i].price;
+               console.log(total);
+              productSplit.splice(j,1);
+        }
+     }
+}
+if(productSplit.length > 0)
+{
+   errorMsg = "Invalid Barcode";
+   document.getElementById("demo").innerHTML = errorMsg;
+}
+else {
+tax = (total * 8.75)/100;
+total = total + tax;
+document.getElementById("demo").innerHTML = "$ " + total;
+}
+}
+</script>
+
+</body>
+</html>
