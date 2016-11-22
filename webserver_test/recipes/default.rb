@@ -13,4 +13,3 @@ include_recipe 'nginx::default'
 template '/var/www/html/index.html' do
   source 'index.html.erb'
 end
-

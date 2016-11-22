@@ -15,10 +15,9 @@ describe service 'nginx' do
 end
 
 describe command 'curl localhost' do
-  its('stdout') { should match /Barcode/ }
+  its(:stdout) { should match /Barcode/ }
 end
 
 describe port 80 do
   it { should be_listening }
 end
-
