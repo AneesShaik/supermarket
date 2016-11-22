@@ -1,0 +1,529 @@
+{
+	"AWSTemplateFormatVersion" : "2010-09-09",
+	"Description" : "Amazon RedHat Wordpress template",
+	"Metadata" : {
+	  "AWS::CloudFormation::Interface" : {
+		"ParameterGroups" : [
+		  { "Label" : { "default" : "VPC/Network Configuration" }, "Parameters" : [ "Tag","VPCCIDR", "AvailabilityZone1", "AvailabilityZone2", "DMZCIDR1", "DMZCIDR2", "PrivateNetworkCIDR", "DBSubnetCIDR1","DBSubnetCIDR2" ] },
+		  { "Label" : { "default" : "Instance configuration" }, "Parameters" : [ "BastionHostInstanceType", "WordpressInstanceType" ] },
+		  { "Label" : { "default" : "Database configuration" }, "Parameters" : [ "databaseName", "databaseSize", "dbInstanceType", "dbUsername", "dbPassword" ] },
+          { "Label" : { "default" : "Access Control" }, "Parameters" : [ "AllowConnectionFrom","KeyPair", "vncPassword" ] },
+					{ "Label" : { "default" : "VNC Scripts Access" }, "Parameters" : [ "VncBucketName", "VncScriptFolder", "VncScriptVersion", "VncS3EndPoint" ] },
+					{ "Label" : { "default" : "Ansible Scripts Access" }, "Parameters" : [ "AnsibleBucketName", "AnsibleScriptFolder", "AnsibleScriptVersion", "AnsibleS3EndPoint" ] }
+		],
+		"ParameterLabels" : { "VPCID" : { "default" : "Which VPC should this be deployed to?" } }
+	  }
+	},
+    "Mappings" : {
+        "FedoraMap" : {
+					"us-east-1":        { "64": "ami-7b8afa11" },
+					"ap-northeast-1":   { "64": "ami-b4193cda" },
+					"eu-west-1":        { "64": "ami-080bd47b" },
+					"ap-southeast-1":   { "64": "ami-9cba7dff" },
+					"ap-southeast-2":   { "64": "ami-90d887f3" },
+					"us-west-2":        { "64": "ami-20203441" },
+					"us-west-1":        { "64": "ami-a6fc90c6" },
+					"eu-central-1":     { "64": "ami-084d5e64" },
+					"sa-east-1":        { "64": "ami-e908b085" }
+        },
+        "RhelMap" : {
+            "ap-northeast-1":   { "64": "ami-0dd8f963" },
+            "ap-southeast-2":   { "64": "ami-e0c19f83" },
+            "eu-west-1":        { "64": "ami-8b8c57f8" },
+            "ap-southeast-1":   { "64": "ami-3f03c55c" },
+            "us-east-1":        { "64": "ami-2051294a" },
+            "us-west-2":        { "64": "ami-775e4f16" },
+            "us-west-1":        { "64": "ami-d1315fb1" },
+            "eu-central-1":     { "64": "ami-875042eb" },
+            "sa-east-1":        { "64": "ami-27b3094b" }
+        }
+    },
+    "Parameters" : {
+			"VncBucketName" : {
+				"Description" : "S3 Bucket Name containing Vnc scripts",
+				"Type" : "String",
+							"Default" : "redhat-quickstart"
+			},
+		"VncScriptFolder" : {
+			"Description" : "S3 Bucket Folder containing scripts",
+			"Type" : "String",
+					"Default" : "vnc-scripts"
+			},
+		"VncScriptVersion" : {
+			"Description" : "Version of scripts",
+			"Type" : "String",
+					"Default" : "v-0.0.1"
+			},
+			"VncS3EndPoint" : {
+				"Description" : "S3 Endpoint",
+				"Type" : "String",
+						"Default" : "s3-us-west-2.amazonaws.com"
+			},
+			"AnsibleBucketName" : {
+				"Description" : "S3 Bucket Name containing Vnc scripts",
+				"Type" : "String",
+							"Default" : "redhat-quickstart"
+			},
+		"AnsibleScriptFolder" : {
+			"Description" : "S3 Bucket Folder containing Ansible scripts",
+			"Type" : "String",
+					"Default" : "ansible-scripts"
+			},
+		"AnsibleScriptVersion" : {
+			"Description" : "Version of Ansible scripts",
+			"Type" : "String",
+					"Default" : "v-0.0.1"
+			},
+			"AnsibleS3EndPoint" : {
+				"Description" : "S3 Endpoint of Ansible Scripts",
+				"Type" : "String",
+						"Default" : "s3-us-west-2.amazonaws.com"
+			},
+		"VPCCIDR" : {
+			"Description" : "IP range for VPC",
+			"Type" : "String",
+            "Default" : "10.0.0.0/16"
+		},
+		"AvailabilityZone1" : {
+			"Description" : "Pick an AvailabilityZone for Subnets(DONT PICK SAME AZs for Both AvailabilityZones)",
+			"Type" : "AWS::EC2::AvailabilityZone::Name"
+		},
+		"AvailabilityZone2" : {
+			"Description" : "Pick an AvailabilityZone for Subnets(DONT PICK SAME AZs for Both AvailabilityZones)",
+			"Type" : "AWS::EC2::AvailabilityZone::Name"
+		},
+		"DMZCIDR1" : {
+			"Description" : "IP range for DMZ subnet-1",
+            "Type" : "String",
+            "Default" : "10.0.0.0/24"
+		},
+		"DMZCIDR2" : {
+			"Description" : "IP range for DMZ subnet-2",
+            "Type" : "String",
+            "Default" : "10.0.1.0/24"
+		},
+		"PrivateNetworkCIDR" : {
+			"Description" : "IP range for private subnet",
+            "Type" : "String",
+            "Default" : "10.0.2.0/24"
+		},
+		"DBSubnetCIDR1" : {
+            "Description" : "IP range for DB subnet 1",
+            "Type" : "String",
+            "Default" : "10.0.4.0/24"
+		},
+		"DBSubnetCIDR2" : {
+            "Description" : "IP range for DB subnet 2",
+            "Type" : "String",
+            "Default" : "10.0.5.0/24"
+		},
+        "AllowConnectionFrom": {
+             "Description" : "IP Address of your system, this allow EC2 servers only accessible from your IP. Must be in the form of x.x.x.x/x",
+             "Type": "String",
+             "MinLength": "9",
+             "MaxLength": "18",
+             "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+             "ConstraintDescription": "Must be a valid IP CIDR range of the form x.x.x.x/x",
+             "Default":"183.82.110.76/32"
+        },
+       "Tag" : {
+            "Description" : "Tag for resurces created by the template",
+            "Type" : "String",
+            "Default" : "Amz-RH-Wordpress"
+        },
+        "WordpressInstanceType" : {
+            "Description" : "Wordpress instance type",
+            "Type" : "String",
+            "Default" : "t2.micro"
+        },
+        "BastionHostInstanceType" : {
+            "Description" : "Bastion host instance type",
+            "Type" : "String",
+            "Default" : "t2.micro"
+        },
+        "KeyPair" : {
+            "Description" : "SSH Key pair to associate with EC2 resources",
+            "Type" : "AWS::EC2::KeyPair::KeyName"
+        },
+        "vncPassword" : {
+            "Description" : "Should be atleast 8 alphanumeric characters. Special characters not allowed",
+            "Type" : "String",
+            "NoEcho": "true"
+        },
+        "databaseName" : {
+            "Description" : "MySQL RDS database name",
+            "Type" : "String",
+            "Default":"dbMySQL"
+        },
+        "databaseSize" : {
+            "Description" : "MySQL RDS database size",
+            "Type" : "String",
+            "MinLength": "1",
+            "MaxLength": "2",
+            "AllowedPattern": "(\\d{1,2})",
+            "ConstraintDescription": "Must be a number less than 100",
+            "Default":"5"
+        },
+        "dbInstanceType" : {
+            "Description" : "Database instance type",
+            "Type" : "String",
+            "Default" : "db.t2.micro"
+        },
+        "dbUsername" : {
+            "Description" : "Should be atleast 8 alphanumeric characters. Special characters not allowed",
+            "Type" : "String"
+        },
+        "dbPassword" : {
+            "Description" : "Should be atleast 8 alphanumeric characters. Special characters not allowed",
+            "Type" : "String",
+            "NoEcho": "true"
+        }
+    },
+    "Resources" : {
+        "vpc" : {
+			"Type" : "AWS::EC2::VPC",
+			"Properties" : {
+				"CidrBlock" : { "Ref" : "VPCCIDR" },
+				"EnableDnsSupport" : true,
+				"EnableDnsHostnames" : true,
+				"InstanceTenancy" : "default",
+				"Tags" : [{ "Key" : "Name", "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Tag" }, "VPC" ] ] } } ]
+			}
+		},
+        "igw" : {
+			"Type" : "AWS::EC2::InternetGateway",
+			"Properties" : {
+				"Tags" : [{ "Key" : "Name", "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Tag" },"Igw" ] ] } } ]
+			}
+		},
+        "igwAttachment" : {
+			"Type" : "AWS::EC2::VPCGatewayAttachment",
+			"Properties" : {
+				"VpcId" : { "Ref" : "vpc" },
+				"InternetGatewayId" : { "Ref" : "igw" }
+			}
+		},
+        "NatGatewayEIP" : { "Type" : "AWS::EC2::EIP", "Properties" : { "Domain" : "vpc" } },
+        "NAT" : {
+            "Type" : "AWS::EC2::NatGateway",
+            "Properties" : {
+                 "AllocationId" : { "Fn::GetAtt" : ["NatGatewayEIP", "AllocationId"]},
+                 "SubnetId" : { "Ref" : "dmzSubnet1"}
+             }
+         },
+         "PublicRoute" : {
+             "Type" : "AWS::EC2::Route",
+             "DependsOn" : "igw",
+             "Properties" : {
+                 "RouteTableId" : { "Ref" : "PublicRouteTable" },
+                 "DestinationCidrBlock" : "0.0.0.0/0",
+                 "GatewayId" : { "Ref" : "igw" }
+             }
+         },
+         "NatRoute" :{
+             "Type" : "AWS::EC2::Route",
+             "Properties" : {
+               "RouteTableId" : { "Ref" : "NatRouteTable" },
+               "DestinationCidrBlock" : "0.0.0.0/0",
+               "NatGatewayId" : { "Ref" : "NAT" }
+             }
+         },
+         "PublicRouteTable" : {
+ 			"Type" : "AWS::EC2::RouteTable",
+ 			"Properties" : {
+ 				"VpcId" : { "Ref" : "vpc" },
+ 				"Tags" : [{ "Key" : "Name", "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Tag" }, "PrivateRouteTable" ] ] } } ]
+ 			}
+ 		},
+
+ 		"NatRouteTable" : {
+ 			"Type" : "AWS::EC2::RouteTable",
+ 			"Properties" : {
+ 				"VpcId" : { "Ref" : "vpc" },
+ 				"Tags" : [{ "Key" : "Name", "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Tag" }, "PublicRouteTable" ] ] } } ]
+ 			}
+ 		},
+        "dmzSubnet1" : {
+            "Type" : "AWS::EC2::Subnet",
+            "Properties" : {
+                "CidrBlock" : { "Ref" : "DMZCIDR1" },
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone1" },
+                "VpcId" : { "Ref" : "vpc" },
+                "MapPublicIpOnLaunch" : "true",
+                "Tags" : [{ "Key" : "Name", "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Tag" }, "DmzSubnet1" ] ] } } ]
+            }
+        },
+        "dmzSubnet2" : {
+            "Type" : "AWS::EC2::Subnet",
+            "Properties" : {
+                "CidrBlock" : { "Ref" : "DMZCIDR2" },
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone2" },
+                "VpcId" : { "Ref" : "vpc" },
+                "MapPublicIpOnLaunch" : "true",
+                "Tags" : [{ "Key" : "Name", "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Tag" }, "DmzSubnet2" ] ] } } ]
+            }
+        },
+        "dmzSubnetAssociation" : {
+			"Type" : "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties" : {
+				"SubnetId" : { "Ref" : "dmzSubnet1" },
+				"RouteTableId" : { "Ref" : "PublicRouteTable" }
+			}
+		},
+        "privateSubnet" : {
+            "Type" : "AWS::EC2::Subnet",
+            "Properties" : {
+                "CidrBlock" : { "Ref" : "PrivateNetworkCIDR" },
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone1" },
+                "VpcId" : { "Ref" : "vpc" },
+                "MapPublicIpOnLaunch" : "false",
+                "Tags" : [{ "Key" : "Name", "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Tag" }, "PrivateSubnet" ] ] } } ]
+            }
+        },
+        "privateSubnetAssociation" : {
+			"Type" : "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties" : {
+				"SubnetId" : { "Ref" : "privateSubnet" },
+				"RouteTableId" : { "Ref" : "NatRouteTable" }
+			}
+		},
+        "dbSubnet01" : {
+            "Type" : "AWS::EC2::Subnet",
+            "Properties" : {
+                "CidrBlock" : { "Ref" : "DBSubnetCIDR1" },
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone1" },
+                "VpcId" : { "Ref" : "vpc" },
+                "Tags" : [{ "Key" : "Name", "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Tag" }, "DbSubet01" ] ] } } ]
+            }
+        },
+        "dbSubnet02" : {
+            "Type" : "AWS::EC2::Subnet",
+            "Properties" : {
+                "CidrBlock" : { "Ref" : "DBSubnetCIDR2" },
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone2" },
+                "VpcId" : { "Ref" : "vpc" },
+                "Tags" : [{ "Key" : "Name", "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Tag" }, "DbSubet02" ] ] } } ]
+            }
+        },
+        "DBSubGroup" : {
+			"Type" : "AWS::RDS::DBSubnetGroup",
+			"Properties" : {
+				"DBSubnetGroupDescription" : "Amz-RH-Wordpress db subnet group",
+				"SubnetIds" : [{ "Ref" : "dbSubnet01" }, { "Ref" : "dbSubnet02" } ],
+				"Tags" : [{ "Key" : "Name", "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Tag" }, "DbSubnetGroup" ] ] } } ]
+			}
+		},
+        "BastionSg" : {
+            "Type" : "AWS::EC2::SecurityGroup",
+			"Properties" : {
+				"VpcId" : { "Ref" : "vpc" },
+				"Tags" : [{ "Key" : "Name", "Value" : { "Fn::Join" : ["-", [{ "Ref" : "Tag" }, "BastionSh"]] } } ],
+				"GroupDescription" : "Enable access (80&443)",
+			        "SecurityGroupIngress" : [
+                        { "IpProtocol" : "tcp", "FromPort" : "5901", "ToPort" : "5901", "CidrIp" : {"Ref":"AllowConnectionFrom"} },
+                        { "IpProtocol" : "tcp", "FromPort" : "22", "ToPort" : "22", "CidrIp" : {"Ref":"AllowConnectionFrom"} }
+                    ]
+			}
+		},
+        "elbSg" : {
+			"Type" : "AWS::EC2::SecurityGroup",
+			"Properties" : {
+				"VpcId" : { "Ref" : "vpc" },
+				"Tags" : [{ "Key" : "Name", "Value" : { "Fn::Join" : ["-", [{ "Ref" : "Tag" }, "ElbSg"]] } } ],
+				"GroupDescription" : "Enable access (80&443)",
+			        "SecurityGroupIngress" : [
+                        { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : {"Ref":"AllowConnectionFrom"} },
+                        { "IpProtocol" : "tcp", "FromPort" : "443", "ToPort" : "443", "CidrIp" : {"Ref":"AllowConnectionFrom"} },
+                        { "IpProtocol" : "-1", "FromPort" : "0", "ToPort" : "0", "SourceSecurityGroupId" : {"Ref":"BastionSg"} }
+                    ]
+			}
+		},
+        "webAppSg" : {
+			"Type" : "AWS::EC2::SecurityGroup",
+			"Properties" : {
+				"VpcId" : { "Ref" : "vpc" },
+				"Tags" : [{ "Key" : "Name", "Value" : { "Fn::Join" : ["-", [{ "Ref" : "Tag" }, "WebAppSg"]] } } ],
+				"GroupDescription" : "Enable access (80&443)",
+			        "SecurityGroupIngress" : [
+                        { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "SourceSecurityGroupId" : {"Ref":"elbSg"} },
+                        { "IpProtocol" : "tcp", "FromPort" : "443", "ToPort" : "443", "SourceSecurityGroupId" : {"Ref":"elbSg"} },
+                        { "IpProtocol" : "-1", "FromPort" : "0", "ToPort" : "0", "SourceSecurityGroupId" : {"Ref":"BastionSg"} }
+                    ]
+			}
+		},
+        "dbSg" : {
+			"Type" : "AWS::EC2::SecurityGroup",
+			"Properties" : {
+				"VpcId" : { "Ref" : "vpc" },
+				"Tags" : [{ "Key" : "Name", "Value" : { "Fn::Join" : ["-", [{ "Ref" : "Tag" }, "DbSg"]] } } ],
+				"GroupDescription" : "Enable access (80&443)",
+			        "SecurityGroupIngress" : [
+                        { "IpProtocol" : "tcp", "FromPort" : "3306", "ToPort" : "3306", "SourceSecurityGroupId" : {"Ref":"webAppSg"} }
+                    ]
+			}
+		},
+        "BastionHost" : {
+            "Type" : "AWS::EC2::Instance",
+            "Properties" : {
+                "InstanceType" : {"Ref":"BastionHostInstanceType"},
+                "ImageId" : { "Fn::FindInMap" : [ "FedoraMap", { "Ref" : "AWS::Region" }, "64" ] },
+                "Tags" : [{ "Key" : "Name", "Value" : { "Fn::Join" : ["-", [{ "Ref" : "Tag" }, "BastionHost"]] } } ],
+                "KeyName" : { "Ref" : "KeyPair" },
+                "NetworkInterfaces": [
+                    { "AssociatePublicIpAddress": "true", "DeviceIndex": "0", "GroupSet": [{ "Ref" : "BastionSg" }], "SubnetId": { "Ref" : "dmzSubnet1" } }
+                ],
+                "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
+									"#!/bin/bash \n",
+									"# Variables \n",
+									"scriptVersion=",{"Ref":"VncScriptVersion"},"\n",
+									"scriptFolder=",{"Ref":"VncScriptFolder"},"\n",
+									"bucketName=",{"Ref":"VncBucketName"},"\n",
+									"s3EndPoint=",{"Ref":"VncS3EndPoint"},"\n",
+									"folderUrl='https://'${s3EndPoint}/${bucketName}/${scriptFolder}/${scriptVersion} \n",
+									"filesToDownload=( 'userdata-vncsetup.sh' 'vncsetup.sh' ) \n",
+									"# Save wait handle on a file for easy access for other scripts \n",
+									"mkdir /tmp/userdata; cd /tmp/userdata \n",
+									"echo '", { "Ref": "BastionHostWaitHandle" }, "' > /tmp/userdata/cfn-signal.url \n",
+									"# Install dependancy and start necessary services \n",
+									"dnf install -y curl wget at\n",
+									"atd \n",
+									"# Download script files to target server \n",
+									"for file in ${filesToDownload[@]}; do \n",
+									"   wget ${folderUrl}/${file} \n",
+									"done \n",
+									"# Initiate VNC setup\n",
+									"chmod u+x /tmp/userdata/* \n",
+									"# NOTE: Following script is used due to the challenges faced during escaping 'double-quote' \n",
+									"bash -x /tmp/userdata/userdata-vncsetup.sh ", { "Ref": "vncPassword" }, " ", { "Ref": "vncPassword" }, " &> /var/log/userdata-vncsetup.log\n"
+                ] ] } }
+            }
+        },
+        "BastionHostWaitHandle" : {
+            "Type" : "AWS::CloudFormation::WaitConditionHandle",
+            "Properties" : {}
+        },
+        "BastionHostWaitCondition" : {
+            "Type" : "AWS::CloudFormation::WaitCondition",
+            "DependsOn" : "BastionHost",
+            "Properties" : {
+                "Handle" : { "Ref" : "BastionHostWaitHandle" },
+                "Timeout" : "1800"
+            }
+        },
+        "WordpressServer" : {
+            "Type" : "AWS::EC2::Instance",
+            "DependsOn" : "WordpressDb",
+            "Properties" : {
+                "InstanceType" : {"Ref":"WordpressInstanceType"},
+                "ImageId" : { "Fn::FindInMap" : [ "RhelMap", { "Ref" : "AWS::Region" }, "64" ] },
+                "Tags" : [{ "Key" : "Name", "Value" : { "Fn::Join" : ["-", [{ "Ref" : "Tag" }, "WordpressServer"]] } } ],
+                "KeyName" : { "Ref" : "KeyPair" },
+                "NetworkInterfaces": [
+                    { "AssociatePublicIpAddress": "false", "DeviceIndex": "0", "GroupSet": [{ "Ref" : "webAppSg" }], "SubnetId": { "Ref" : "privateSubnet" } }
+                ],
+                "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
+                    "#!/bin/bash \n",
+                    "#yum -y update \n",
+										"# Variables \n",
+										"scriptVersion=",{"Ref":"AnsibleScriptVersion"},"\n",
+										"scriptFolder=",{"Ref":"AnsibleScriptFolder"},"\n",
+										"bucketName=",{"Ref":"AnsibleBucketName"},"\n",
+										"s3EndPoint=",{"Ref":"AnsibleS3EndPoint"},"\n",
+										"folderUrl='https://'${s3EndPoint}/${bucketName}/${scriptFolder}/${scriptVersion} \n",
+										"filesToDownload=( 'ansible-playbook-amz-redhat.zip' ) \n",
+                    "yum -y install http://rpms.remirepo.net/enterprise/remi-release-7.rpm https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm \n",
+                    "yum-config-manager --enable remi-php70 \n",
+                    "yum -y install curl wget unzip python-pip gcc python-devel libffi-devel openssl-devel \n",
+                    "pip install ansible==1.9.4 \n",
+                    "sed -i 's/Defaults    requiretty/#Defaults    requiretty/g' /etc/sudoers \n",
+                    "echo '", {"Ref":"WordpressServerWaitHandle"},"' > /tmp/userdata/cfn-signal.url \n",
+										"mkdir /tmp/userdata; cd /tmp/userdata \n",
+										"# Download script files to target server \n",
+										"for file in ${filesToDownload[@]}; do \n",
+										"   wget ${folderUrl}/${file} \n",
+										"done \n",
+                    "unzip ansible-playbook-amz-redhat.zip \n",
+                    "cd /tmp/userdata/playbook/ \n",
+                    "bash /tmp/userdata/playbook/wordpress.sh '", {"Ref":"dbUsername"},"' '", {"Ref":"dbPassword"},"' '", { "Fn::GetAtt" : [ "WordpressDb", "Endpoint.Address" ]},":", { "Fn::GetAtt" : [ "WordpressDb", "Endpoint.Port" ]},"' '",{"Ref":"databaseName"}, "' \n",
+                    "easy_install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz \n",
+                    "cfn-signal -s true -e 0 '",{"Ref":"WordpressServerWaitHandle"},"'\n"
+                ] ] } }
+            }
+        },
+        "WordpressServerWaitHandle" : {
+            "Type" : "AWS::CloudFormation::WaitConditionHandle",
+            "Properties" : {}
+        },
+        "WordpressServerWaitCondition" : {
+            "Type" : "AWS::CloudFormation::WaitCondition",
+            "DependsOn" : "WordpressServer",
+            "Properties" : {
+                "Handle" : { "Ref" : "WordpressServerWaitHandle" },
+                "Timeout" : "1800"
+            }
+        },
+        "WordpressDb" : {
+            "Type" : "AWS::RDS::DBInstance",
+            "Properties" : {
+                "DBName" : { "Ref" : "databaseName" },
+                "AllocatedStorage" : { "Ref" : "databaseSize" },
+                "DBInstanceClass" : { "Ref" : "dbInstanceType" },
+                "Engine" : "MySQL",
+                "EngineVersion" : "5.6.27",
+                "MasterUsername" : { "Ref" : "dbUsername" },
+                "MasterUserPassword" : { "Ref" : "dbPassword" },
+                "VPCSecurityGroups" : [{"Ref":"dbSg"}],
+                "DBSubnetGroupName" :{"Ref":"DBSubGroup"},
+                "Tags" : [{ "Key" : "Name", "Value" : { "Fn::Join" : ["-", [{ "Ref" : "Tag" }, "WordpressRDS"]] } } ]
+            }
+        },
+        "ElasticLoadBalancer" : {
+            "Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
+            "DependsOn": "WordpressServer",
+            "Properties" : {
+                "Subnets" : [{"Ref":"dmzSubnet1"},{"Ref":"dmzSubnet2"}],
+                "Instances" : [ { "Ref" : "WordpressServer" } ],
+                "SecurityGroups": [{ "Ref": "elbSg" }],
+                "CrossZone" : "true",
+                "Listeners" : [ {
+                    "LoadBalancerPort" : "80",
+                    "InstancePort" : "80",
+                    "Protocol" : "HTTP"
+                } ],
+                "HealthCheck" : {
+                    "Target" : { "Fn::Join" : [ "", [ "TCP:80" ] ] },
+                    "HealthyThreshold" : "3",
+                    "UnhealthyThreshold" : "5",
+                    "Interval" : "30",
+                    "Timeout" : "5"
+                }
+            }
+        }
+    },
+    "Outputs" : {
+        "WordpressURL" : {
+            "Description" : "The URL of Wordpress website",
+            "Value" : { "Fn::Join" : [ "", [ "http://", { "Fn::GetAtt" : [ "ElasticLoadBalancer", "DNSName" ]}]]}
+        },
+        "BastionHostIpaddress" : {
+            "Description" : "Bastion host IP Address/Port",
+            "Value" : { "Fn::Join" : [ "", [ { "Fn::GetAtt" : [ "BastionHost", "PublicIp" ]},":5901" ] ] }
+        },
+        "BastionHostUsername" : {
+            "Description" : "Username to connect to bastion host",
+            "Value" : "fedora"
+        },
+        "WordpressServerPrivateIp" : {
+            "Description" : "Wordpress server private ip address",
+            "Value" : { "Fn::GetAtt" : [ "WordpressServer", "PrivateIp" ]}
+        },
+	"WordpressServerUsername" : {
+            "Description" : "Username to SSH to Wordpress Server",
+            "Value" : "ec2-user"
+        },
+        "DatabaseEndpoint" : {
+            "Description" : "Database Endpoint of RDS-MySQL",
+            "Value" : { "Fn::Join" : [ "", [ { "Fn::GetAtt" : [ "WordpressDb", "Endpoint.Address" ]} , { "Fn::GetAtt" : [ "WordpressDb", "Endpoint.Port" ]} ] ] }
+        }
+    }
+}
